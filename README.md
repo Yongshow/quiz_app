@@ -9,7 +9,7 @@
 | `static_version/` | 纯前端静态版，无需后端 | **GitHub Pages** 在线部署（已上线），也可本地打开 |
 | `server/` | Flask 后端高级版 | 本机/局域网运行，支持 **网页上传新题库** |
 
-> 🔴 在线站点：**https://yongshow.github.io/quiz_app/**（GitHub Pages，由 GitHub Actions 自动发布）
+> 🔴 在线站点：（GitHub Pages） https://yongshow.github.io/quiz_app/
 
 题库来源：`/home/yong/Python_test/data/技师（选择题）.docx`（1495 道单选）、`/home/yong/Python_test/data/技师（判断题）.docx`（1828 道判断）。  
 解析后的统一数据存放于 `static_version/data/questions.json`。
