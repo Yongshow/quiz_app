@@ -329,12 +329,12 @@ function finishQuiz(){
   const L=quiz.list.length,sc=score(),pct=L?Math.round(sc/L*100):0;
   const best=parseInt(localStorage.getItem('bestPct')||'0');
   if(pct>best)localStorage.setItem('bestPct',pct);
-  const wrong=quiz.list.filter((q,i)=>quiz.answers[i]!==q.answer);
-  saveWrong(wrong);
+  const wrong=quiz.list.map((q,i)=>({...q,ua:quiz.answers[i]})).filter(q=>q.ua!==q.answer);
+  saveWrong(wrong.map(({ua,...rest})=>rest));
   let wrongHtml='';
   if(wrong.length){
     wrongHtml='<div class="card"><h2>❌ 错题回顾（'+wrong.length+' 题）</h2>'+
-      wrong.map((q,i)=>'<div style="border-bottom:1px solid var(--line);padding:8px 0"><div class="muted">'+(i+1)+'. '+(q.type==='单选'?'单选':'判断')+'</div><div style="font-size:14px">'+esc(q.question)+'</div><div style="font-size:13px;color:var(--ok)">答案：'+ansLabel(q)+'</div></div>').join('')
+      wrong.map((q,i)=>wrongQuestionHtml(q,i,q.ua)).join('')
       +'<button class="btn block" style="margin-top:12px" onclick="retryQuiz()">🔁 重练这组错题</button></div>';
   }
   render(`
@@ -358,6 +358,29 @@ function reviewWrong(){
 }
 
 /* ================= 错题本 ================= */
+function wrongQuestionHtml(q,i,ua){
+  let opts='';
+  if(q.type==='单选'){
+    opts=['A','B','C','D'].map((k,j)=>{
+      if(!q.options[j])return '';
+      let mark='';
+      if(ua&&ua===k)mark='<span style="color:var(--err);font-weight:600">✗ 你的答案 </span>';
+      if(k===q.answer)mark+='<span style="color:var(--ok);font-weight:600">✓ 正确 </span>';
+      return '<div style="padding:4px 0">'+mark+'<b>'+k+'</b> '+esc(q.options[j])+'</div>';
+    }).join('');
+  }else{
+    let uaMark='';
+    if(ua&&ua!==q.answer)uaMark='<div style="padding:2px 0"><span style="color:var(--err)">你的答案：'+esc(ua)+'</span></div>';
+    opts=uaMark+'<div style="padding:4px 0"><b>√</b> 正确</div><div style="padding:4px 0"><b>×</b> 错误</div>';
+  }
+  return '<div style="border-bottom:1px solid var(--line);padding:8px 0">'+
+    '<div class="muted">'+(i+1)+'. '+(q.type==='单选'?'单选':'判断')+'</div>'+
+    '<div style="font-size:14px;margin:8px 0">'+esc(q.question)+'</div>'+
+    '<div style="margin:6px 0">'+opts+'</div>'+
+    '<div style="font-size:13px;color:var(--ok)">答案：'+ansLabel(q)+'</div>'+
+    '</div>';
+}
+
 function getWrong(){try{return JSON.parse(localStorage.getItem('wrongbook')||'[]');}catch(e){return [];}}
 function saveWrong(arr){
   if(!arr.length)return;
@@ -381,7 +404,7 @@ function goMine(){
     <div class="card">
       <h2>错题本</h2>
       ${wr.length===0?'<div class="muted">还没有错题，去做一次题吧。</div>':
-        wr.slice(0,200).map((q,i)=>'<div style="border-bottom:1px solid var(--line);padding:8px 0"><div class="muted">'+(i+1)+'. '+(q.type==='单选'?'单选':'判断')+'</div><div style="font-size:14px">'+esc(q.question)+'</div><div style="font-size:13px;color:var(--ok)">答案：'+ansLabel(q)+'</div></div>').join('')}
+        wr.slice(0,200).map((q,i)=>wrongQuestionHtml(q,i)).join('')}
       <div style="height:10px"></div>
       <button class="btn block ghost" onclick="reviewWrong()">开始练习错题</button>
       <button class="btn block ghost" style="margin-top:8px;color:var(--err)" onclick="clearWrong()">清空错题本</button>
