@@ -9,7 +9,7 @@
 | `static_version/` | 纯前端静态版，无需后端 | **GitHub Pages** 在线部署（已上线），也可本地打开 |
 | `server/` | Flask 后端高级版 | 本机/局域网运行，支持 **网页上传新题库** |
 
-> 🔴 在线站点：** https://yongshow.github.io/quiz_app/ **（GitHub Pages，由 GitHub Actions 自动发布）
+> 🔴 在线站点：**https://yongshow.github.io/quiz_app/**（GitHub Pages，由 GitHub Actions 自动发布）
 
 题库来源：`/home/yong/Python_test/data/技师（选择题）.docx`（1495 道单选）、`/home/yong/Python_test/data/技师（判断题）.docx`（1828 道判断）。  
 解析后的统一数据存放于 `static_version/data/questions.json`。
@@ -23,7 +23,7 @@ quiz_app/
 ├── README.md
 ├── requirements.txt           # Python 依赖（仅后端需要）
 ├── .gitignore
-├── .github/workflows/pages.yml# GitHub Actions：push 到 main 自动发布 GitHub Pages
+├── .github/workflows/static.yml # GitHub Actions：push 到 main 自动发布 GitHub Pages
 ├── qbank/
 │   ├── __init__.py
 │   └── parser.py              # 共享解析器（docx -> 结构化题目）
@@ -59,8 +59,7 @@ https://yongshow.github.io/quiz_app/
 ```
 
 ### 工作原理
-- `.github/workflows/pages.yml` 监听 `push 到 main` 分支
-- 使用 GitHub 官方 Pages 动作把 **`static_version/`** 目录发布到 Pages
+- `.github/workflows/static.yml` 监听 `push 到 main` 分支，并把 **`static_version/`** 目录发布到 Pages
 - GitHub 仓库 **Settings → Pages → Source 选择 `GitHub Actions`**（已就绪）
 
 ### 更新线上题库 / 代码
