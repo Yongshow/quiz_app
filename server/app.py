@@ -17,8 +17,10 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import tempfile
+import time
 
 from flask import Flask, jsonify, render_template, request
 
@@ -133,6 +135,91 @@ def upload():
 def stats():
     bank = _load_bank()
     return jsonify(bank["meta"])
+
+
+# ---------- 跨设备进度同步 ----------
+# 每个“同步码”对应一份云端进度快照（错题本 + 最佳成绩），存于 server/sync/
+SYNC_DIR = os.path.join(HERE, "sync")
+os.makedirs(SYNC_DIR, exist_ok=True)
+
+
+def _safe_code(code: str) -> str | None:
+    """校验同步码，防止路径穿越。仅允许字母/数字/下划线/中划线，长度 1-64。"""
+    if not code or len(code) > 64:
+        return None
+    if not re.fullmatch(r"[A-Za-z0-9_\-]+", code):
+        return None
+    return code
+
+
+def _sync_path(code: str) -> str:
+    return os.path.join(SYNC_DIR, code + ".json")
+
+
+@app.route("/api/ping")
+def ping():
+    """前端用于检测当前是否运行在后端版（静态版无此接口）。"""
+    return jsonify({"ok": True, "server": "quiz_app"})
+
+
+@app.route("/api/sync/<code>", methods=["GET"])
+def sync_get(code: str):
+    code = _safe_code(code)
+    if not code:
+        return jsonify({"ok": False, "error": "同步码不合法（仅限字母/数字/下划线/中划线，≤64位）"}), 400
+    path = _sync_path(code)
+    if not os.path.exists(path):
+        return jsonify({"ok": False, "error": "该同步码尚无云端数据"}), 404
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    return jsonify({"ok": True, "data": data})
+
+
+@app.route("/api/sync/<code>", methods=["POST"])
+def sync_post(code: str):
+    code = _safe_code(code)
+    if not code:
+        return jsonify({"ok": False, "error": "同步码不合法（仅限字母/数字/下划线/中划线，≤64位）"}), 400
+    payload = request.get_json(silent=True) or {}
+    if payload.get("kind") != "quiz_app_progress":
+        return jsonify({"ok": False, "error": "数据格式不正确"}), 400
+
+    # 与云端已有数据合并（错题按题干去重，bestPct 取较大值）
+    path = _sync_path(code)
+    old = {}
+    if os.path.exists(path):
+        try:
+            with open(path, encoding="utf-8") as f:
+                old = json.load(f)
+        except Exception:  # noqa: BLE001
+            old = {}
+
+    old_wrong = old.get("wrongbook") or []
+    new_wrong = payload.get("wrongbook") or []
+    merged = {q.get("question"): q for q in old_wrong if isinstance(q, dict) and q.get("question")}
+    for q in new_wrong:
+        if isinstance(q, dict) and q.get("question"):
+            merged[q["question"]] = q
+
+    try:
+        best = max(int(old.get("bestPct") or 0), int(payload.get("bestPct") or 0))
+    except (TypeError, ValueError):
+        best = 0
+
+    data = {
+        "kind": "quiz_app_progress",
+        "version": 1,
+        "bestPct": str(best),
+        "wrongbook": list(merged.values()),
+        "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=1)
+    os.replace(tmp, path)
+
+    return jsonify({"ok": True, "data": data, "错题数": len(data["wrongbook"])})
 
 
 # ---------- 启动 ----------

@@ -113,6 +113,7 @@ async function loadData(){
     BANK=data.items||[];META=data.meta||{};
     $('loading').style.display='none';
     $('app').style.display='flex';
+    tryImportFromHash(); // 若带 #sync= 迁移链接则自动导入
     goHome();
   }catch(e){
     $('loading').innerHTML='题库加载失败：请确认 data/questions.json 存在。<br><button class="btn" style="margin-top:10px" onclick="location.reload()">重试</button>';
@@ -331,6 +332,7 @@ function finishQuiz(){
   if(pct>best)localStorage.setItem('bestPct',pct);
   const wrong=quiz.list.map((q,i)=>({...q,ua:quiz.answers[i]})).filter(q=>q.ua!==q.answer);
   saveWrong(wrong.map(({ua,...rest})=>rest));
+  autoSync(); // 后端版且已设置同步码时，静默上传到云端
   let wrongHtml='';
   if(wrong.length){
     wrongHtml='<div class="card"><h2>❌ 错题回顾（'+wrong.length+' 题）</h2>'+
@@ -382,13 +384,179 @@ function wrongQuestionHtml(q,i,ua){
 }
 
 function getWrong(){try{return JSON.parse(localStorage.getItem('wrongbook')||'[]');}catch(e){return [];}}
+function setWrong(arr){localStorage.setItem('wrongbook',JSON.stringify(arr));}
 function saveWrong(arr){
   if(!arr.length)return;
   const map=new Map(getWrong().map(q=>[q.question,q]));
   arr.forEach(q=>map.set(q.question,q));
-  localStorage.setItem('wrongbook',JSON.stringify([...map.values()]));
+  setWrong([...map.values()]);
 }
 function wrongCount(){return getWrong().length;}
+
+/* ================= 数据备份与跨设备同步 =================
+ * 双通道设计：
+ * ① 文件导出/导入：任何部署形态（含 GitHub Pages 静态版）都可用，
+ *    导出 JSON 备份文件，换设备后导入合并，不依赖服务器。
+ * ② 服务器云同步：仅 Flask 后端版可用（前端自动检测 /api/ping），
+ *    多设备使用同一“同步码”即可共享错题本与最佳成绩。
+ */
+function getBest(){return localStorage.getItem('bestPct')||'';}
+function setBest(v){localStorage.setItem('bestPct',v);}
+
+function collectProgress(){
+  return {kind:'quiz_app_progress',version:1,exported_at:new Date().toISOString(),
+    bestPct:getBest(),wrongbook:getWrong()};
+}
+function mergeProgress(data){
+  if(!data||data.kind!=='quiz_app_progress')return {ok:false,error:'文件格式不正确（非本应用备份文件）'};
+  let added=0;
+  if(data.wrongbook&&Array.isArray(data.wrongbook)){
+    const map=new Map(getWrong().map(q=>[q.question,q]));
+    data.wrongbook.forEach(q=>{if(q&&q.question&&!map.has(q.question)){map.set(q.question,q);added++;}});
+    setWrong([...map.values()]);
+  }
+  const nb=parseInt(data.bestPct||'0');
+  if(nb>parseInt(getBest()||'0'))setBest(String(nb));
+  return {ok:true,added,total:wrongCount()};
+}
+
+/* ---- ① 文件导出/导入 ---- */
+function exportProgress(){
+  const data=collectProgress();
+  const blob=new Blob([JSON.stringify(data,null,1)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='quiz_backup_'+new Date().toISOString().slice(0,10)+'.json';
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+function importProgressFile(input){
+  const f=input.files&&input.files[0];
+  if(!f)return;
+  const rd=new FileReader();
+  rd.onload=()=>{
+    try{
+      const res=mergeProgress(JSON.parse(rd.result));
+      alert(res.ok?('✅ 导入成功：新增 '+res.added+' 道错题，错题本共 '+res.total+' 题')
+                  :('❌ '+res.error));
+      if(res.ok)goMine();
+    }catch(e){alert('❌ 文件解析失败：'+e.message);}
+    input.value='';
+  };
+  rd.readAsText(f);
+}
+
+/* ---- ② 服务器云同步 ---- */
+let HAS_SERVER=null; // null=未检测 true/false=检测结果
+async function detectServer(){
+  if(HAS_SERVER!==null)return HAS_SERVER;
+  try{
+    const r=await fetch('/api/ping',{cache:'no-store'});
+    HAS_SERVER=r.ok;
+  }catch(e){HAS_SERVER=false;}
+  return HAS_SERVER;
+}
+function getSyncCode(){return (localStorage.getItem('syncCode')||'').trim();}
+function setSyncCodeInput(){
+  const inp=$('syncCodeInput');
+  if(inp){const c=getSyncCode();if(c)inp.value=c;}
+}
+async function pushProgress(){
+  if(!(await detectServer())){alert('当前为纯静态版，无服务器可同步。请使用“导出备份 / 导入备份”方式。');return;}
+  let code=($('syncCodeInput')?$('syncCodeInput').value.trim():getSyncCode());
+  if(!code){alert('请先填写同步码（任意自定义字符串，多设备保持一致即可）');return;}
+  localStorage.setItem('syncCode',code);
+  const r=await fetch('/api/sync/'+encodeURIComponent(code),{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(collectProgress())});
+  const j=await r.json();
+  if(j.ok){
+    const res=mergeProgress(j.data||{});
+    alert('✅ 已同步到云端（同步码：'+code+'）\n本地错题本共 '+wrongCount()+' 题');
+    goMine();
+  }else alert('❌ 同步失败：'+(j.error||'未知错误'));
+}
+async function pullProgress(){
+  if(!(await detectServer())){alert('当前为纯静态版，无服务器可同步。请使用“导出备份 / 导入备份”方式。');return;}
+  let code=($('syncCodeInput')?$('syncCodeInput').value.trim():getSyncCode());
+  if(!code){alert('请先填写同步码');return;}
+  localStorage.setItem('syncCode',code);
+  const r=await fetch('/api/sync/'+encodeURIComponent(code),{cache:'no-store'});
+  const j=await r.json();
+  if(!j.ok){alert('❌ 获取失败：'+(j.error||'该同步码尚无云端数据'));return;}
+  const res=mergeProgress(j.data||{});
+  alert('✅ 已从云端恢复：新增 '+res.added+' 道错题，错题本共 '+res.total+' 题');
+  goMine();
+}
+/* 答题结束后静默自动同步（仅后端版且已设置同步码时） */
+async function autoSync(){
+  try{
+    if(!(await detectServer()))return;
+    const code=getSyncCode();
+    if(!code)return;
+    await fetch('/api/sync/'+encodeURIComponent(code),{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(collectProgress())});
+  }catch(e){/* 静默失败，不影响答题体验 */}
+}
+
+/* ---- ③ 迁移链接（纯前端，静态版首选，无需服务器/文件） ----
+ * 把错题本（仅存题干）+最佳成绩压缩编码进 URL，
+ * 另一台设备打开该链接即自动按题干匹配题库并导入。
+ */
+function collectCompact(){return {k:1,b:getBest(),w:getWrong().map(q=>q.question)};}
+function b64urlEncode(bytes){
+  let bin='';bytes.forEach(b=>bin+=String.fromCharCode(b));
+  return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function b64urlDecode(str){
+  str=str.replace(/-/g,'+').replace(/_/g,'/');while(str.length%4)str+='=';
+  const bin=atob(str);const bytes=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+  return bytes;
+}
+async function deflateStr(s){
+  if(typeof CompressionStream==='undefined')return null;
+  const cs=new CompressionStream('deflate');
+  const stream=new Blob([new TextEncoder().encode(s)]).stream().pipeThrough(cs);
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+async function inflateStr(bytes){
+  const ds=new DecompressionStream('deflate');
+  const stream=new Blob([bytes]).stream().pipeThrough(ds);
+  return new TextDecoder().decode(await new Response(stream).arrayBuffer());
+}
+async function buildShareLink(){
+  const json=JSON.stringify(collectCompact());
+  const z=await deflateStr(json);
+  const encoded=z?('Z.'+b64urlEncode(z)):('R.'+b64urlEncode(new TextEncoder().encode(json)));
+  return location.origin+location.pathname+'#sync='+encoded;
+}
+async function showShareLink(){
+  const link=await buildShareLink();
+  $('shareLink').value=link;
+  $('shareBox').classList.remove('hidden');
+}
+async function copyShareLink(){
+  const ta=$('shareLink');ta.select();ta.setSelectionRange(0,99999);
+  try{await navigator.clipboard.writeText(ta.value);alert('✅ 链接已复制，发送到另一台设备打开即可导入');}
+  catch(e){document.execCommand('copy');alert('✅ 链接已复制');}
+}
+async function tryImportFromHash(){
+  const m=location.hash.match(/#sync=(.+)/);
+  if(!m)return;
+  try{
+    const enc=m[1],kind=enc.slice(0,2),bytes=b64urlDecode(enc.slice(2));
+    const json=(kind==='Z.')?await inflateStr(bytes):new TextDecoder().decode(bytes);
+    const compact=JSON.parse(json);
+    const byText=new Map(BANK.map(q=>[q.question,q]));
+    const wrong=(compact.w||[]).map(t=>byText.get(t)).filter(Boolean);
+    const res=mergeProgress({kind:'quiz_app_progress',bestPct:compact.b,wrongbook:wrong});
+    history.replaceState(null,'',location.pathname+location.search);
+    alert('✅ 迁移成功：新增 '+res.added+' 道错题，错题本共 '+res.total+' 题');
+    goMine();
+  }catch(e){alert('❌ 迁移链接解析失败：'+e.message);}
+}
 
 
 function goMine(){
@@ -402,6 +570,37 @@ function goMine(){
       <div class="stat"><b>${wr.length}</b><span>错题本数量</span></div>
     </div>
     <div class="card">
+      <h2>🔗 迁移链接（推荐 · 无需服务器）</h2>
+      <div class="muted">把错题本和最佳成绩生成一个链接，发送到另一台设备打开即自动导入，最适合手机使用。</div>
+      <button class="btn block" style="margin-top:10px" onclick="showShareLink()">🔗 生成迁移链接</button>
+      <div id="shareBox" class="hidden" style="margin-top:10px">
+        <textarea id="shareLink" readonly style="width:100%;height:70px;font-size:12px;border:1px solid var(--line);border-radius:10px;padding:8px;word-break:break-all"></textarea>
+        <button class="btn block" style="margin-top:6px" onclick="copyShareLink()">📋 复制链接</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>☁️ 跨设备同步</h2>
+      <div class="muted" id="syncHint">检测服务器中…</div>
+      <div id="serverSync" class="hidden">
+        <div class="muted" style="margin-top:6px">同步码（自定义，多设备保持一致）</div>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <input type="text" id="syncCodeInput" placeholder="如：yong-2026" style="flex:1;padding:8px 10px;border:1px solid var(--line);border-radius:10px;font-size:14px">
+        </div>
+        <div class="grid2" style="margin-top:8px">
+          <button class="btn block" onclick="pushProgress()">⬆️ 上传到云端</button>
+          <button class="btn block ghost" onclick="pullProgress()">⬇️ 从云端恢复</button>
+        </div>
+        <div class="muted" style="margin-top:6px">上传会合并云端已有错题；恢复会把云端错题合并到本机。答题结束后自动静默上传。</div>
+      </div>
+      <div style="height:10px"></div>
+      <div class="muted">文件备份（导出 JSON 文件，换设备后导入）</div>
+      <div class="grid2" style="margin-top:8px">
+        <button class="btn block ghost" onclick="exportProgress()">💾 导出备份</button>
+        <button class="btn block ghost" onclick="$('importFile').click()">📂 导入备份</button>
+      </div>
+      <input type="file" id="importFile" accept=".json,application/json" style="display:none" onchange="importProgressFile(this)">
+    </div>
+    <div class="card">
       <h2>错题本</h2>
       ${wr.length===0?'<div class="muted">还没有错题，去做一次题吧。</div>':
         wr.slice(0,200).map((q,i)=>wrongQuestionHtml(q,i)).join('')}
@@ -410,6 +609,13 @@ function goMine(){
       <button class="btn block ghost" style="margin-top:8px;color:var(--err)" onclick="clearWrong()">清空错题本</button>
     </div>
   `);
+  setSyncCodeInput();
+  detectServer().then(ok=>{
+    const hint=$('syncHint');
+    if(!hint)return;
+    if(ok){hint.textContent='已检测到本地服务器，可使用云端同步';$('serverSync').classList.remove('hidden');}
+    else hint.textContent='当前为纯静态版（无服务器），推荐使用上方“迁移链接”或下方“文件备份”跨设备迁移。';
+  });
 }
 function clearWrong(){if(confirm('确定清空错题本？')){localStorage.removeItem('wrongbook');goMine();}}
 

@@ -8,6 +8,9 @@ venv/
 # 上传的临时题库
 server/uploads/
 
+# 跨设备同步的用户进度数据
+server/sync/
+
 # 编辑器
 .vscode/
 .idea/
