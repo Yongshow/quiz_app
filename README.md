@@ -31,7 +31,9 @@ quiz_app/
 │   └── build_static.py        # 重新解析原始 docx 并生成 questions.json
 ├── static_version/            # ① 纯前端静态版（GitHub Pages 发布目录）
 │   ├── .nojekyll              # 跳过 Jekyll，保证纯静态
-│   ├── index.html             # 单页应用（背题/答题/错题本）
+│   ├── index.html             # HTML 外壳（~30 行）
+│   ├── style.css              # 全局样式（CSS 变量、响应式布局、组件样式）
+│   ├── app.js                 # 全部业务逻辑（背题/答题/错题本/跨设备同步）
 │   ├── data/
 │   │   └── questions.json     # 题库数据（共 3323 题：单选 1495 / 判断 1828）
 │   └── static/                # 预留静态资源目录（当前为空）
