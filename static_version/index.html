@@ -78,7 +78,10 @@ input[type=number],select{width:100%;padding:clamp(8px,1.2vw,10px);border:1px so
 .result-big{font-size:clamp(32px,5vw,48px);font-weight:800;text-align:center;color:var(--primary);margin:8px 0 2px;}
 .result-sub{text-align:center;color:var(--muted);margin-bottom:clamp(12px,1.8vw,16px);}
 .wnum{font-size:clamp(12px,1.2vw,13px);color:var(--muted);margin-bottom:8px;}
+footer{position:fixed;bottom:0;left:0;width:100%;background:var(--card);box-shadow:0 -2px 8px rgba(0,0,0,.08);border-top:1px solid var(--line);z-index:20;}
+footer .nav{display:flex;max-width:min(100%,1200px);margin:0 auto;}
 footer .nav div{flex:1;text-align:center;padding:clamp(8px,1.2vw,10px) 4px clamp(6px,0.8vw,8px);font-size:clamp(11px,1.2vw,13px);color:var(--muted);cursor:pointer;}
+footer .nav div.on{color:var(--primary);font-weight:600;}
 footer .nav div b{display:block;font-size:clamp(18px,2.2vw,22px);line-height:1;}
 </style>
 </head>
