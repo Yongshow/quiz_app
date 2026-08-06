@@ -1,0 +1,34 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>上传题库</title>
+<style>
+body{font-family:sans-serif;max-width:560px;margin:0 auto;padding:20px;background:#f3f5f9}
+.card{background:#fff;border-radius:12px;padding:18px;margin:12px 0}
+input[type=file]{width:100%;padding:10px;border:1px solid #ccc;border-radius:8px}
+button{background:#2563eb;color:#fff;border:none;border-radius:8px;padding:12px 18px;font-size:15px;margin-top:12px}
+.msg{color:#16a34a;font-size:14px;white-space:pre-wrap}
+a{color:#2563eb}
+</style></head><body>
+<h2>📤 上传新题库（.docx）</h2>
+<div class="card">
+  <p>支持：选择题（题干含 (A)… 标记）、判断题（题干含 （√/×）标记）。<br>
+  上传后自动解析并合并进现有题库，立即在“背题/答题”中生效。</p>
+  <form method="post" enctype="multipart/form-data" action="/api/upload">
+    <input type="file" name="file" accept=".docx">
+    <button type="submit">上传并解析</button>
+  </form>
+</div>
+<div id="res" class="msg"></div>
+<p><a href="/">← 返回答题首页</a></p>
+<script>
+addEventListener('load',()=>{
+  const f=document.querySelector('form');
+  f.addEventListener('submit',async e=>{
+    e.preventDefault();
+    const fd=new FormData(f);const r=await fetch('/api/upload',{method:'POST',body:fd});
+    const j=await r.json();document.getElementById('res').textContent=
+      (j.ok?'✅ 成功：':'❌ 失败：')+JSON.stringify(j);
+  });
+});
+</script>
+</body></html>

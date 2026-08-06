@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 上传的临时题库
+server/uploads/
+
+# 编辑器
+.vscode/
+.idea/
+.DS_Store
