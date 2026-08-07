@@ -9,48 +9,6 @@
 | `static_version/` | 纯前端静态版，无需后端 | **GitHub Pages** 在线部署（已上线），也可本地打开 |
 | `server/` | Flask 后端高级版 | 本机/局域网运行，支持 **网页上传新题库** |
 
-> 🔴 在线站点：（GitHub Pages） https://yongshow.github.io/quiz_app/
-
-题库来源：`/home/yong/Python_test/data/技师（选择题）.docx`（1495 道单选）、`/home/yong/Python_test/data/技师（判断题）.docx`（1828 道判断）。  
-解析后的统一数据存放于 `static_version/data/questions.json`。
-
----
-
-## 目录结构
-
-```
-quiz_app/
-├── README.md
-├── requirements.txt           # Python 依赖（仅后端需要）
-├── .gitignore
-├── .github/workflows/static.yml # GitHub Actions：push 到 main 自动发布 GitHub Pages
-├── qbank/
-│   ├── __init__.py
-│   └── parser.py              # 共享解析器（docx -> 结构化题目）
-├── scripts/
-│   └── build_static.py        # 重新解析原始 docx 并生成 questions.json
-├── static_version/            # ① 纯前端静态版（GitHub Pages 发布目录）
-│   ├── .nojekyll              # 跳过 Jekyll，保证纯静态
-│   ├── index.html             # HTML 外壳（~30 行）
-│   ├── style.css              # 全局样式（CSS 变量、响应式布局、组件样式）
-│   ├── app.js                 # 全部业务逻辑（背题/答题/错题本/跨设备同步）
-│   ├── data/
-│   │   └── questions.json     # 题库数据（共 3323 题：单选 1495 / 判断 1828）
-│   └── static/                # 预留静态资源目录（当前为空）
-├── server/                    # ② Flask 后端高级版（本地运行）
-│   ├── app.py                 # 主程序 + 题库上传/合并接口 + 进度云同步接口
-│   ├── static/                # 预留静态资源目录（当前为空）
-│   ├── templates/
-│   │   └── manage.html        # 上传题库页面（HTML 模板）
-│   ├── uploads/               # 上传的临时题库（已 gitignore）
-│   └── sync/                  # 跨设备同步的用户进度数据（已 gitignore）
-└── data/                      # （不在项目目录内，见下方说明）
-```
-
-> **说明**：项目目录内没有 `data/`。原始 Word 题库位于项目根目录外侧的 `/home/yong/Python_test/data/`，构建脚本通过 `../data/` 引用该目录。
-
----
-
 ## 一、在线部署（GitHub Pages · 已上线）
 
 本仓库已配置 GitHub Actions 自动部署，推送代码即自动更新线上站点，无需手动操作。
