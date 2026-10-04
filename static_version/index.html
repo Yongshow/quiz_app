@@ -4,13 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="theme-color" content="#2563eb">
-<title>背题·答题系统</title>
+<title>光伏题库 · 背题答题</title>
+<link rel="stylesheet" href="vendor/katex.min.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div id="app">
   <header>
-    <h1 id="appTitle">📚 背题·答题系统</h1>
+    <h1 id="appTitle">📚 光伏题库 · 背题答题</h1>
     <button class="btn" id="btnHome" onclick="goHome()">首页</button>
   </header>
   <main id="main"></main>
@@ -24,7 +25,9 @@
   </footer>
 </div>
 <div id="loading" style="text-align:center;padding:60px 0;color:#6b7280;">题库加载中…</div>
+<div id="imgZoom" class="img-zoom hidden" onclick="closeZoom()"><img id="imgZoomImg" alt=""></div>
+<script src="vendor/katex.min.js"></script>
+<script src="vendor/auto-render.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
-

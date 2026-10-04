@@ -1,31 +1,88 @@
-# 背题·答题系统
+# 光伏题库 · 背题 / 答题系统
 
-一个基于所上传题库（Word `.docx` 题库）的移动端背题、答题系统。手机端可独立运行，以 Web 网页形式呈现。
+一个纯前端静态的背题、答题系统（无需后端），手机浏览器即可使用，可部署到 GitHub Pages。
+支持**多个题库切换**，题库与题库之间数据互不混合。
 
-本项目包含 **两种形态**，功能一致（背题 / 随机答题 / 即时判分 / 错题本 / 历史最佳）：
+## 一、题库
 
-| 形态 | 说明 | 运行/部署 |
-|------|------|-----------|
-| `static_version/` | 纯前端静态版，无需后端 | **GitHub Pages** 在线部署（已上线），也可本地打开 |
-| `server/` | Flask 后端高级版 | 本机/局域网运行，支持 **网页上传新题库** |
+| 题库 | 来源 | 题量 | 状态 |
+|------|------|-----:|------|
+| 光伏专业题库 | `data/光伏专业题库.xls` | 715 | ✅ 已完成 |
+| 光伏汇总全部 | `data/光伏汇总全部.docx` | 3330 | ✅ 已导入（不含选项无分隔符的少量选择题） |
 
-## 一、在线部署（GitHub Pages · 已上线）
+> 「光伏汇总全部」原文档是一份多题库汇总：Part A 为规整的 1290 题；Part B 含多个分区。
+> 已导入：Part A 全部；Part B 的「一、填空 / 二、选择 / 三、判断 / 四、简答 / 五、问答 /
+> 应知应会选择题 / 二、填空 / 判断题」以及混合大区中可靠的 **简答 / 判断 / 填空**。
+> 同题库内按题干去重，重复项优先保留 Part A。
+> 未导入：混合大区中选项**无标号、无分隔符**连写的少量单/多选（无法可靠切分，避免误数据）。
 
-本仓库已配置 GitHub Actions 自动部署，推送代码即自动更新线上站点，无需手动操作。
+## 二、题型与功能
 
-### 线上地址
+| 题型 | 背题 | 答题 |
+|------|:----:|:----:|
+| 单选题 / 多选题 / 判断题 | ✅ | ✅ |
+| 填空题 / 简答题 / 论述题 / 名词解释 / 计算题 / 绘图题 | ✅ | — |
+
+- **选择题库**：首页顶部切换题库；背题、答题、统计、错题本随题库切换。
+- **背题**：显示/隐藏答案；按 题型 / 章节 / 难易度 筛选；随机顺序、自动翻页、跳转、左右滑动切题。
+- **答题**：单选 / 多选 / 判断 任意组合，可筛章节、难易度、题量；即时判分；多选题需提交，全对才算对；结束后可回顾、重练错题。
+- **我的**：错题本（按题型筛选、单题移除、练习、清空）、历史最佳、跨设备迁移链接、文件备份。
+- **公式**：尽量转为 LaTeX 并用 KaTeX 渲染；**图片**：按题关联，点击可放大。
+- 判断题答错时显示题库给出的“正确描述”；原题缺失答案的题目会标注「答案缺失」且不参与答题。
+
+## 三、目录结构
 
 ```
-https://yongshow.github.io/quiz_app/
+quiz_app/
+├── data/
+│   ├── 光伏专业题库.xls        # 题库一来源
+│   └── 光伏汇总全部.docx       # 题库二来源
+├── qbank/
+│   ├── parser.py               # xls 解析器
+│   └── docx_parser.py          # docx 解析器（Part A 已实现）
+├── scripts/build_static.py     # 生成全部前端数据
+├── static_version/             # 纯前端静态版
+│   ├── index.html
+│   ├── style.css
+│   ├── app.js
+│   ├── vendor/                 # KaTeX（本地内置，离线可用）
+│   └── data/
+│       ├── banks.json          # 题库索引
+│       ├── pv_professional.json
+│       ├── pv_all.json
+│       └── media/pv_all/*      # 题库二图片
+├── requirements.txt
+└── README.md
 ```
 
-### 工作原理
-- `.github/workflows/static.yml` 监听 `push 到 main` 分支，并把 **`static_version/`** 目录发布到 Pages
-- GitHub 仓库 **Settings → Pages → Source 选择 `GitHub Actions`**（已就绪）
+## 四、本地使用
 
-### 更新线上题库 / 代码
+```bash
+cd /home/yong/Python_test/quiz_app/static_version
+python -m http.server 8000
+# 浏览器打开 http://127.0.0.1:8000
+```
 
-本地修改后执行：
+手机访问：同一 Wi-Fi，打开 `http://<本机IP>:8000`。
+
+## 五、重新生成题库数据
+
+环境使用 `myenv`（依赖见 `requirements.txt`：`xlrd`、`python-docx`）：
+
+```bash
+cd /home/yong/Python_test
+source myenv/bin/activate
+pip install -r quiz_app/requirements.txt
+
+cd quiz_app
+python scripts/build_static.py
+```
+
+生成/覆盖：`static_version/data/banks.json`、`pv_professional.json`、`pv_all.json` 及 `media/pv_all/`。
+
+## 六、部署到 GitHub Pages
+
+仓库已配置 GitHub Actions（`.github/workflows/static.yml`），推送 `main` 即自动发布 `static_version/`：
 
 ```bash
 cd /home/yong/Python_test/quiz_app
@@ -34,98 +91,20 @@ git commit -m "更新说明"
 git push
 ```
 
-GitHub Actions 会自动重新构建并部署，稍等片刻线上即更新。
+线上地址：`https://yongshow.github.io/quiz_app/`
 
-### 首次/重新启用 Pages（仅需一次）
+## 七、跨设备同步
 
-1. 打开 GitHub 仓库 → **Settings → Pages**
-2. **Source（源）** 选择 `GitHub Actions`
-3. 等待 Actions 运行完成后访问上面的地址
+错题本、最佳成绩按题库独立存放在浏览器 `localStorage`。迁移方式（均为合并，不覆盖）：
 
----
+1. **迁移链接（推荐）**：“我的” → 生成迁移链接，含全部题库进度，另一台设备打开即导入。
+2. **文件备份**：“我的” → 导出备份 / 导入备份（JSON，含全部题库）。
 
-## 二、本地直接使用（免服务器）
+## 八、题库格式
 
-用浏览器打开 `static_version/index.html` 即可（题库数据在同目录 `data/` 中）。  
-> 若 `file://` 打开被浏览器拦截 fetch，请改用下面的本地后端方式，或直接使用已上线的 GitHub Pages 链接。
+**题库一（xls）**：工作表即题型，列结构见 `qbank/parser.py` 注释。
 
----
-
-## 三、Flask 后端高级版（本地运行，支持上传题库）
-
-### 1. 安装依赖（使用当前虚拟环境）
-
-```bash
-cd /home/yong/Python_test
-source myenv/bin/activate
-pip install -r quiz_app/requirements.txt
-```
-
-### 2. 启动服务
-
-```bash
-cd /home/yong/Python_test/quiz_app
-python server/app.py
-```
-
-默认监听 `0.0.0.0:5000`（可用环境变量 `PORT` 修改端口）。
-
-- 电脑访问：`http://127.0.0.1:5000`
-- **手机访问**：手机与本机连同一 Wi-Fi，浏览器打开 `http://<本机IP>:5000`
-  （查看本机 IP 可执行 `hostname -I` 或 `ipconfig`；Windows 防火墙需放行该端口）
-- 上传题库：`http://<本机IP>:5000/manage`
-
-### 3. 上传新题库
-
-在 `/manage` 页面上传任意 `.docx` 题库，服务端自动识别题型（单选/判断）、解析、  
-按题干去重后合并进 `static_version/data/questions.json`，前端重新加载即生效。
-
----
-
-## 四、功能使用说明（手机端）
-
-- **首页**：显示题库总数/单选/判断数量、历史最佳正确率。
-- **背题**：逐题浏览，点“显示/隐藏答案”；顶部可直接在**全部/单选题/判断题**间切换；  
-  支持随机顺序、自动翻页、按题型筛选、跳转到指定题号。
-- **答题**：选择题型与题量（全部/10/20/30/50/100），随机出题、即时判分（绿=对、红=错）、  
-  进度条；结束后显示正确率并可回顾错题、一键重练本组错题。
-- **我的**：查看历史最佳正确率与错题本（本地自动保存），可练习或清空错题。
-### 跨设备同步错题本
-
-错题本默认保存在浏览器 localStorage，仅本机有效。换设备时可用以下方式迁移（按推荐程度排序）：
-
-1. **迁移链接（推荐 · 所有版本可用，无需服务器/文件）**  
-   "我的"页面 → **生成迁移链接**：把错题本 + 最佳成绩压缩编码成一个链接；  
-   发送到另一台设备并打开该链接，即自动按题干匹配题库并合并导入。最适合手机使用。
-2. **文件备份（所有版本可用，含 GitHub Pages 静态版）**  
-   "我的"页面 → **导出备份**：下载一个 JSON 文件（含错题本 + 最佳成绩）；  
-   在新设备上 → **导入备份**：选择该文件即可合并导入。
-3. **云端同步（仅 Flask 后端版）**  
-   "我的"页面填写**同步码**（自定义字符串，多设备保持一致）→ **上传到云端**；  
-   新设备填同一同步码 → **从云端恢复**。  
-   云端数据按同步码存于 `server/sync/`（已 gitignore，不入库）；  
-   上传/恢复均为**合并**操作（错题按题干去重、最佳成绩取较高值）；  
-   答题结束后会自动静默上传。
----
-
-## 五、重新解析题库 / 数据更新
-
-原始文档位于 `/home/yong/Python_test/data/` 目录，若更新了原始 docx，重新生成数据：
-
-```bash
-cd /home/yong/Python_test/quiz_app
-source ../myenv/bin/activate
-python scripts/build_static.py
-```
-
-生成后会覆盖 `static_version/data/questions.json`；如需同步到线上，再执行 `git push` 即可。
-
----
-
-## 六、常见问题
-
-- **手机打不开线上地址？** GitHub Pages（`github.io`）在国内直连可能不稳定，可刷新或稍后再试，也可用本地后端方式访问。
-- **上传失败？** 仅支持 `.docx`，且题目需带答案标记：选择题为 `(A)` 等，判断题带 `（√/×）`。
-- **推送到 GitHub 被拒？** 本机已配置 Git SSH over 443（`~/.ssh/config`），国内网络环境建议使用该方式推送。
-- **线上题库如何更新？** 本地重新生成 `questions.json` 后 `git push`，Actions 会自动部署。
-
+**题库二（docx）**：
+- Part A（第 0–8136 段）：`题型+难度+N/1290`，答案以「标准答案」标记；题型 单选/判断/简答/论述/计算/绘图。
+- Part B（第 8137 段–文末）：多个分区，格式各异，分区解析逐步补充。
+- 难度映射：`易/较易 → 容易`、`中等 → 中等`、`较难/难 → 困难`、`空 → 隐藏`。
