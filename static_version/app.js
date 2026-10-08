@@ -1,6 +1,6 @@
 "use strict";
 /* 前端版本号：每次修改 app.js 后同步更新 index.html 的 app.js?v=... 与本值 */
-const APP_VERSION = "20261008b";
+const APP_VERSION = "20261008c";
 console.log("[quiz_app] app.js version:", APP_VERSION);
 /* ============================================================
  * 光伏题库 · 背题 / 答题系统（纯前端静态版 · 多选题库）
@@ -10,7 +10,8 @@ console.log("[quiz_app] app.js version:", APP_VERSION);
  *       其余题型          —— 背题
  *   - 答题：按题型标签顺序练习，未作答隐藏答案，作答后显示正确答案与实时正确率；
  *       进度按题型自动保存，下次可续答；错题实时入错题本
- *   - 背题：进度（位置/顺序/答案显隐）按题型自动保存，下次续答
+ *   - 背题：进度（位置/顺序/答案显隐）按题型自动保存，下次续答；
+ *       界面不再提供题型/难易筛选（题型由首页“按题型背题”入口决定，页内保留章节筛选）
  *   - 错题本 / 历史最佳按题库独立保存
  *   - 支持图片与 LaTeX 公式（KaTeX）渲染
  * ============================================================ */
@@ -303,8 +304,7 @@ function applyStudySession(type) {
   studyFilter.type = type;
   studyFilter.chapter = (s.chapter && (s.chapter === "全部" || META.chapters.includes(s.chapter)))
     ? s.chapter : "全部";
-  studyFilter.difficulty = (s.difficulty && (s.difficulty === "全部" || META.difficulties.includes(s.difficulty)))
-    ? s.difficulty : "全部";
+  studyFilter.difficulty = "全部"; // 已移除难易度筛选
   const keys = studyList().map(qKey);
   const remain = new Set(keys);
   const order = [];
@@ -319,43 +319,25 @@ function goStudy(type) {
   currentPage = "study";
   setFoot(2);
   $("appTitle").textContent = "📖 背题 · " + (META.title || "");
-  let t = type || localStorage.getItem("studyType::" + BANK_ID) || studyFilter.type || "全部";
+  let t = type || "全部";
   if (t !== "全部" && !META.types.includes(t)) t = "全部";
   applyStudySession(t);
   renderStudy();
 }
 function startStudy(t) { goStudy(t); }
-function setStudyType(t) {
-  if (t === studyFilter.type) return;
-  studySave();
-  applyStudySession(t);
-  renderStudy();
-}
 function setStudyChapter(v) {
   studyFilter.chapter = v; studyIdx = 0; studyOrder = studyList().map(qKey);
-  studySave(); renderStudy();
-}
-function setStudyDiff(v) {
-  studyFilter.difficulty = v; studyIdx = 0; studyOrder = studyList().map(qKey);
   studySave(); renderStudy();
 }
 
 function renderStudy() {
   const list = studyList();
-  const typeTabs = ["全部", ...META.types].map((t) =>
-    `<div class="tab ${studyFilter.type === t ? "on" : ""}" onclick="setStudyType('${t}')">${t === "全部" ? "全部" : esc(t)}</div>`
-  ).join("");
   let filters = "";
   if (META.chapters.length) {
     const o = ["全部", ...META.chapters].map((c) => `<option ${studyFilter.chapter === c ? "selected" : ""}>${esc(c)}</option>`).join("");
     filters += `<select onchange="setStudyChapter(this.value)">${o}</select>`;
   }
-  if (META.difficulties.length) {
-    const o = ["全部", ...META.difficulties].map((d) => `<option ${studyFilter.difficulty === d ? "selected" : ""}>${esc(d)}</option>`).join("");
-    filters += `<select onchange="setStudyDiff(this.value)">${o}</select>`;
-  }
-  const filterBar = `<div class="tabs scroll-x">${typeTabs}</div>`
-    + (filters ? '<div class="filters">' + filters + "</div>" : "");
+  const filterBar = filters ? '<div class="filters">' + filters + "</div>" : "";
   if (!list.length) { render(filterBar + '<div class="card empty">当前筛选条件下暂无题目</div>'); return; }
   const byKey = new Map(list.map((q) => [qKey(q), q]));
   if (studyOrder.length !== list.length) studyOrder = list.map(qKey);
