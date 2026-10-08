@@ -7,6 +7,7 @@
  *       其余题型          —— 背题
  *   - 答题：按题型标签顺序练习，未作答隐藏答案，作答后显示正确答案与实时正确率；
  *       进度按题型自动保存，下次可续答；错题实时入错题本
+ *   - 背题：进度（位置/顺序/答案显隐）按题型自动保存，下次续答
  *   - 错题本 / 历史最佳按题库独立保存
  *   - 支持图片与 LaTeX 公式（KaTeX）渲染
  * ============================================================ */
@@ -274,34 +275,70 @@ function answerTextHtml(q) {
 let studyFilter = { type: "全部", chapter: "全部", difficulty: "全部" };
 let studyIdx = 0, studyOrder = [], studyShow = true, autoT = null;
 
+function studyStorageKey() { return "studysession::" + BANK_ID; }
+function loadStudySessions() {
+  try { return JSON.parse(localStorage.getItem(studyStorageKey()) || "{}"); } catch (e) { return {}; }
+}
+function studySave() {
+  const all = loadStudySessions();
+  all[studyFilter.type] = {
+    idx: studyIdx, order: studyOrder, show: studyShow,
+    chapter: studyFilter.chapter, difficulty: studyFilter.difficulty
+  };
+  localStorage.setItem(studyStorageKey(), JSON.stringify(all));
+  localStorage.setItem("studyType::" + BANK_ID, studyFilter.type);
+}
 function studyList() {
   return BANK.filter((q) =>
     (studyFilter.type === "全部" || q.type === studyFilter.type) &&
     (studyFilter.chapter === "全部" || q.chapter === studyFilter.chapter) &&
     (studyFilter.difficulty === "全部" || q.difficulty === studyFilter.difficulty));
 }
-function startStudy(t) {
-  studyFilter = { type: t, chapter: "全部", difficulty: "全部" };
-  studyIdx = 0; studyOrder = []; studyShow = true;
-  goStudy();
+// 按题型恢复上次的筛选、顺序、位置与答案显示状态
+function applyStudySession(type) {
+  const s = loadStudySessions()[type] || {};
+  studyFilter.type = type;
+  studyFilter.chapter = (s.chapter && (s.chapter === "全部" || META.chapters.includes(s.chapter)))
+    ? s.chapter : "全部";
+  studyFilter.difficulty = (s.difficulty && (s.difficulty === "全部" || META.difficulties.includes(s.difficulty)))
+    ? s.difficulty : "全部";
+  const keys = studyList().map(qKey);
+  const remain = new Set(keys);
+  const order = [];
+  (s.order || []).forEach((k) => { if (remain.has(k)) { order.push(k); remain.delete(k); } });
+  keys.forEach((k) => { if (remain.has(k)) order.push(k); });
+  studyOrder = order;
+  studyIdx = Math.min(Math.max(0, s.idx || 0), Math.max(0, order.length - 1));
+  studyShow = s.show !== false;
+  localStorage.setItem("studyType::" + BANK_ID, type);
 }
-function goStudy() {
+function goStudy(type) {
   currentPage = "study";
   setFoot(2);
   $("appTitle").textContent = "📖 背题 · " + (META.title || "");
-  const list = studyList();
-  if (!studyOrder.length || studyOrder.length !== list.length) studyOrder = list.map((_, i) => i);
-  if (studyIdx >= list.length) studyIdx = 0;
+  let t = type || localStorage.getItem("studyType::" + BANK_ID) || studyFilter.type || "全部";
+  if (t !== "全部" && !META.types.includes(t)) t = "全部";
+  applyStudySession(t);
   renderStudy();
 }
-function setStudyType(t) { studyFilter.type = t; studyIdx = 0; studyOrder = []; studyShow = true; goStudy(); }
-function setStudyChapter(v) { studyFilter.chapter = v; studyIdx = 0; studyOrder = []; goStudy(); }
-function setStudyDiff(v) { studyFilter.difficulty = v; studyIdx = 0; studyOrder = []; goStudy(); }
+function startStudy(t) { goStudy(t); }
+function setStudyType(t) {
+  if (t === studyFilter.type) return;
+  studySave();
+  applyStudySession(t);
+  renderStudy();
+}
+function setStudyChapter(v) {
+  studyFilter.chapter = v; studyIdx = 0; studyOrder = studyList().map(qKey);
+  studySave(); renderStudy();
+}
+function setStudyDiff(v) {
+  studyFilter.difficulty = v; studyIdx = 0; studyOrder = studyList().map(qKey);
+  studySave(); renderStudy();
+}
 
 function renderStudy() {
   const list = studyList();
-  if (!list.length) { render('<div class="card empty">当前筛选条件下暂无题目</div>'); return; }
-  const q = list[studyOrder[studyIdx]];
   const typeTabs = ["全部", ...META.types].map((t) =>
     `<div class="tab ${studyFilter.type === t ? "on" : ""}" onclick="setStudyType('${t}')">${t === "全部" ? "全部" : esc(t)}</div>`
   ).join("");
@@ -314,11 +351,17 @@ function renderStudy() {
     const o = ["全部", ...META.difficulties].map((d) => `<option ${studyFilter.difficulty === d ? "selected" : ""}>${esc(d)}</option>`).join("");
     filters += `<select onchange="setStudyDiff(this.value)">${o}</select>`;
   }
+  const filterBar = `<div class="tabs scroll-x">${typeTabs}</div>`
+    + (filters ? '<div class="filters">' + filters + "</div>" : "");
+  if (!list.length) { render(filterBar + '<div class="card empty">当前筛选条件下暂无题目</div>'); return; }
+  const byKey = new Map(list.map((q) => [qKey(q), q]));
+  if (studyOrder.length !== list.length) studyOrder = list.map(qKey);
+  if (studyIdx >= list.length) studyIdx = 0;
+  const q = byKey.get(studyOrder[studyIdx]) || list[0];
   const correctSet = (q.answer || "").split("");
   const answerImgs = (!q.answerMissing && q.answerImages) ? imagesHtml(q.answerImages) : "";
   render(`
-    <div class="tabs scroll-x">${typeTabs}</div>
-    ${filters ? '<div class="filters">' + filters + "</div>" : ""}
+    ${filterBar}
     <div class="card qcard">
       <div class="qmeta">
         <span class="muted">第 <b>${studyIdx + 1}</b> / ${list.length} 题</span>
@@ -329,9 +372,9 @@ function renderStudy() {
       ${answerBodyHtml(q, studyShow)}
       <div class="ansbox hidden" id="ansArea">${answerTextHtml(q)}${answerImgs}</div>
       <div class="navbar">
-        <button class="btn ghost" onclick="studyNav(-1)">‹ 上一题</button>
+        <button class="btn ghost" ${studyIdx === 0 ? "disabled" : ""} onclick="studyNav(-1)">‹ 上一题</button>
         <button class="btn answer-btn" id="toggleAns" onclick="toggleAns()">${studyShow ? "隐藏答案" : "显示答案"}</button>
-        <button class="btn ghost" onclick="studyNav(1)">下一题 ›</button>
+        <button class="btn ghost" ${studyIdx >= list.length - 1 ? "disabled" : ""} onclick="studyNav(1)">下一题 ›</button>
       </div>
     </div>
     <div class="jump">
@@ -345,30 +388,30 @@ function renderStudy() {
   `);
   if (studyShow) $("ansArea").classList.remove("hidden");
 }
-function toggleAns() { studyShow = !studyShow; goStudy(); }
+function toggleAns() { studyShow = !studyShow; studySave(); renderStudy(); }
 function studyNav(d) {
   if (autoT) { clearInterval(autoT); autoT = null; }
   const list = studyList();
   studyIdx = Math.min(Math.max(0, studyIdx + d), list.length - 1);
-  renderStudy();
+  studySave(); renderStudy();
 }
-function studyShuffle() { studyOrder = shuffle(studyOrder); studyIdx = 0; goStudy(); }
+function studyShuffle() { studyOrder = shuffle(studyOrder); studyIdx = 0; studySave(); renderStudy(); }
 function studyJump() {
   const n = parseInt($("jumpInput").value);
   if (!n) return;
   studyIdx = Math.min(Math.max(0, n - 1), studyList().length - 1);
-  goStudy();
+  studySave(); renderStudy();
 }
 function studyAuto() {
-  if (autoT) { clearInterval(autoT); autoT = null; goStudy(); return; }
+  if (autoT) { clearInterval(autoT); autoT = null; studySave(); renderStudy(); return; }
   studyShow = true;
   autoT = setInterval(() => {
     const list = studyList();
-    if (studyIdx >= list.length - 1) { clearInterval(autoT); autoT = null; renderStudy(); return; }
+    if (studyIdx >= list.length - 1) { clearInterval(autoT); autoT = null; studySave(); renderStudy(); return; }
     studyIdx++;
-    renderStudy();
+    studySave(); renderStudy();
   }, 2500);
-  goStudy();
+  studySave(); renderStudy();
 }
 
 /* ================= 答题 ================= */
