@@ -1,2 +1,11 @@
-xlrd>=2.0
-python-docx>=1.1
+# 光伏题库项目依赖（Python 3.12，虚拟环境 myenv）
+# 安装：pip install -r requirements.txt
+
+# ---- 直接依赖（被脚本直接 import）----
+xlrd>=2.0            # 解析 .xls：qbank/parser.py（光伏专业题库）
+python-docx>=1.1     # 解析 .docx：qbank/docx_parser.py、qbank/bishi_parser.py
+openpyxl>=3.1        # 解析 .xlsx：qbank/xlsx_parser.py（光伏实操题库）
+
+# ---- 传递依赖（由上述库引入，一般无需单独安装）----
+lxml>=5.0            # python-docx 依赖：Word XML 解析
+et-xmlfile>=1.1      # openpyxl 依赖：流式读写 xlsx

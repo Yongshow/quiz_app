@@ -133,10 +133,16 @@ def _convert_math(span: str) -> str:
 
 
 def mathify(text: str) -> str:
-    """把文本中“像公式”的片段转为 $LaTeX$，其余原样保留。"""
+    """把文本中“像公式”的片段转为 $LaTeX$，其余原样保留。
+
+    逐行处理，避免 $…$ 跨换行配对而产生无效公式。
+    """
     if not text:
         return text
+    return "\n".join(_mathify_line(ln) for ln in text.split("\n"))
 
+
+def _mathify_line(text: str) -> str:
     def repl(m):
         span = m.group(0)
         if not _STRONG.search(span):

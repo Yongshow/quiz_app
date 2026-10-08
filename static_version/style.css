@@ -183,6 +183,8 @@ footer .nav div b{display:block;font-size:clamp(18px,2.2vw,22px);line-height:1.1
 /* ---------- 新增题型配色 ---------- */
 .qtype.calc{background:#fff7ed;color:#c2410c;}
 .qtype.draw{background:#f0f9ff;color:#0369a1;}
+.qtype.prac{background:#f1f5f9;color:#334155;}
+.tstat.calc b{color:#c2410c;} .tstat.draw b{color:#0369a1;} .tstat.prac b{color:#334155;}
 
 /* ---------- 题库选择 ---------- */
 .bank-row{display:flex;align-items:center;gap:10px;padding:12px;border:1.5px solid var(--line);border-radius:12px;
