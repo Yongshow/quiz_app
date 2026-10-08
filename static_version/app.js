@@ -1,4 +1,7 @@
 "use strict";
+/* 前端版本号：每次修改 app.js 后同步更新 index.html 的 app.js?v=... 与本值 */
+const APP_VERSION = "20261008b";
+console.log("[quiz_app] app.js version:", APP_VERSION);
 /* ============================================================
  * 光伏题库 · 背题 / 答题系统（纯前端静态版 · 多选题库）
  *   - 选择题库：光伏专业题库 / 光伏汇总全部 / 光伏实操笔试题库

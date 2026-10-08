@@ -107,6 +107,11 @@ git push
 
 线上地址：`https://yongshow.github.io/quiz_app/`
 
+> **更新后浏览器仍显示旧界面？** GitHub Pages 对 `app.js` 等静态资源默认缓存 10 分钟
+> （`Cache-Control: max-age=600`）。每次发布修改过 `app.js`/`style.css` 后，请**同步修改
+> `static_version/index.html` 中的版本号**（`<script src="app.js?v=YYYYMMDDx">`），
+> 以强制浏览器拉取新文件。若当前设备仍为旧版，可“强制刷新”（Ctrl+F5 / 清除站点缓存）一次。
+
 ## 七、跨设备同步
 
 错题本、最佳成绩、答题进度按题库独立存放在浏览器 `localStorage`。迁移方式（均为合并，不覆盖）：
