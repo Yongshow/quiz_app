@@ -1,10 +1,12 @@
 "use strict";
 /* ============================================================
  * 光伏题库 · 背题 / 答题系统（纯前端静态版 · 多选题库）
- *   - 选择题库：光伏专业题库 / 光伏汇总全部
- *   - 题型：单选、多选、判断、填空、简答、论述、名词解释、计算、绘图
- *       单选 / 多选 / 判断 —— 背题 + 答题
+ *   - 选择题库：光伏专业题库 / 光伏汇总全部 / 光伏实操笔试题库
+ *   - 题型：单选、多选、判断、填空、简答、论述、名词解释、计算、绘图、实操
+ *       单选 / 多选 / 判断 —— 背题 + 答题（仅客观题）
  *       其余题型          —— 背题
+ *   - 答题：按题型标签顺序练习，未作答隐藏答案，作答后显示正确答案与实时正确率；
+ *       进度按题型自动保存，下次可续答；错题实时入错题本
  *   - 错题本 / 历史最佳按题库独立保存
  *   - 支持图片与 LaTeX 公式（KaTeX）渲染
  * ============================================================ */
@@ -195,7 +197,7 @@ function goHome() {
       <div class="tip">
         • <b>选择题库</b>：上方切换「光伏专业题库 / 光伏汇总全部 / 光伏实操笔试题库」，背题、答题、错题本都会随之切换。<br>
         • <b>背题</b>：逐题浏览，可显示答案、按题型 / 章节 / 难易度筛选、随机顺序、自动翻页。<br>
-        • <b>答题</b>：单选 / 多选 / 判断随机抽题，即时判分，结束后可回顾并重练错题。<br>
+        • <b>答题</b>：单选 / 多选 / 判断按题型顺序练习（可切乱序），未作答隐藏答案，作答后显示正确答案并实时统计正确率；进度自动保存，下次可续答。<br>
         • 公式已尽量转为 LaTeX 渲染，图片可点击放大。
       </div>
     </div>
@@ -370,74 +372,98 @@ function studyAuto() {
 }
 
 /* ================= 答题 ================= */
-let quiz = { list: [], pos: 0, answers: {}, picked: {} };
+const QUIZ_TABS = ["全部", ...QUIZ_TYPES];
+let quiz = { source: "bank", type: "全部", list: [], pos: 0, answers: {}, picked: {}, shuffled: false };
+
+function qKey(q) {
+  if (q.code) return q.code + "::" + q.type;
+  return q.type + "::" + (q.question || "") + "::" + (q.options || []).join("|");
+}
+function quizStorageKey() { return "quizsession::" + BANK_ID; }
+function loadQuizSessions() {
+  try { return JSON.parse(localStorage.getItem(quizStorageKey()) || "{}"); } catch (e) { return {}; }
+}
+function saveQuizSession() {
+  if (quiz.source !== "bank") return;
+  const all = loadQuizSessions();
+  all[quiz.type] = {
+    order: quiz.list.map(qKey), pos: quiz.pos,
+    answers: quiz.answers, picked: quiz.picked, shuffled: quiz.shuffled
+  };
+  localStorage.setItem(quizStorageKey(), JSON.stringify(all));
+}
+function quizBase() { return quiz.source === "wrong" ? getWrong() : BANK; }
+function quizPool(type) {
+  return quizBase().filter((q) => QUIZ_TYPES.includes(q.type) && !q.answerMissing && q.answer
+    && (type === "全部" || q.type === type));
+}
+function buildQuiz(type) {
+  quiz.type = type;
+  const pool = quizPool(type);
+  if (quiz.source === "wrong") {
+    quiz.list = pool; quiz.pos = 0; quiz.answers = {}; quiz.picked = {}; quiz.shuffled = false;
+    return;
+  }
+  const s = loadQuizSessions()[type] || {};
+  const byKey = new Map(pool.map((q) => [qKey(q), q]));
+  const list = [];
+  (s.order || []).forEach((k) => { if (byKey.has(k)) { list.push(byKey.get(k)); byKey.delete(k); } });
+  pool.forEach((q) => { const k = qKey(q); if (byKey.has(k)) list.push(q); });
+  quiz.list = list;
+  quiz.pos = Math.min(Math.max(0, s.pos || 0), Math.max(0, list.length - 1));
+  quiz.answers = s.answers || {};
+  quiz.picked = s.picked || {};
+  quiz.shuffled = !!s.shuffled;
+}
 
 function goQuiz() {
   currentPage = "quiz";
   setFoot(3);
   $("appTitle").textContent = "✏️ 答题 · " + (META.title || "");
-  const counts = META.counts || {};
-  const qtypes = QUIZ_TYPES.filter((t) => META.types.includes(t));
-  const boxes = qtypes.map((t) =>
-    `<label class="chk"><input type="checkbox" id="ct_${t}" checked> ${TYPE_NAME[t]} <span class="muted">(${counts[t] || 0})</span></label>`
-  ).join("");
-  let filters = "";
-  if (META.chapters.length) {
-    filters += '<div class="field"><div class="muted">章节</div><select id="quizChapter">'
-      + ["全部", ...META.chapters].map((c) => `<option>${esc(c)}</option>`).join("") + "</select></div>";
-  }
-  if (META.difficulties.length) {
-    filters += '<div class="field"><div class="muted">难易度</div><select id="quizDiff">'
-      + ["全部", ...META.difficulties].map((d) => `<option>${esc(d)}</option>`).join("") + "</select></div>";
-  }
-  render(`
-    <div class="card">
-      <h2>开始新测验</h2>
-      <div class="muted">选择题型</div>
-      <div class="chk-group">${boxes}</div>
-      ${filters ? '<div class="field-row">' + filters + "</div>" : ""}
-      <div class="field" style="margin-top:10px"><div class="muted">题目数量</div>
-        <select id="quizCount">
-          <option value="all">全部题目（随机顺序）</option>
-          <option value="10">10 题</option>
-          <option value="20" selected>20 题</option>
-          <option value="30">30 题</option>
-          <option value="50">50 题</option>
-          <option value="100">100 题</option>
-        </select>
-      </div>
-      <div style="height:14px"></div>
-      <button class="btn block big grad-green" onclick="startQuiz()">开始答题</button>
-    </div>
-    <div class="card wrong-entry">
-      <div class="wrong-entry-txt">📕 错题本<span class="muted">（${wrongCount()} 题）</span></div>
-      <button class="btn block ghost" onclick="reviewWrong()">做错题本</button>
-    </div>
-  `);
-}
-function startQuiz() {
-  const types = QUIZ_TYPES.filter((t) => $(`ct_${t}`) && $(`ct_${t}`).checked);
-  if (!types.length) { alert("请至少选择一种题型"); return; }
-  const chapter = $("quizChapter") ? $("quizChapter").value : "全部";
-  const diff = $("quizDiff") ? $("quizDiff").value : "全部";
-  let pool = BANK.filter((q) => types.includes(q.type)
-    && !q.answerMissing && q.answer
-    && (chapter === "全部" || q.chapter === chapter)
-    && (diff === "全部" || q.difficulty === diff));
-  pool = shuffle(pool);
-  const n = $("quizCount").value;
-  if (n !== "all") pool = pool.slice(0, parseInt(n));
-  quiz = { list: pool, pos: 0, answers: {}, picked: {} };
+  quiz.source = "bank";
+  const saved = localStorage.getItem("quizType::" + BANK_ID);
+  buildQuiz(QUIZ_TABS.includes(saved) ? saved : "全部");
   renderQuiz();
+}
+function setQuizType(t) {
+  if (quiz.type === t) return;
+  saveQuizSession();
+  localStorage.setItem("quizType::" + BANK_ID, t);
+  buildQuiz(t);
+  renderQuiz();
+}
+function quizStats() {
+  let answered = 0, correct = 0;
+  quiz.list.forEach((q) => {
+    const a = quiz.answers[qKey(q)];
+    if (a != null) { answered++; if (a === q.answer) correct++; }
+  });
+  return { answered, correct, acc: answered ? Math.round(correct / answered * 100) : 0 };
+}
+function recordAnswer(q, ans) {
+  if (ans !== q.answer) saveWrong([{ ...q, ua: ans }]);
+  const st = quizStats();
+  if (st.answered === quiz.list.length && st.answered > 0) {
+    const best = parseInt(getBest() || "0");
+    if (st.acc > best) setBest(String(st.acc));
+  }
 }
 function renderQuiz() {
   const L = quiz.list.length;
-  if (!L) { render('<div class="card empty">没有符合条件的题目</div>'); return; }
+  const tabs = QUIZ_TABS.map((t) =>
+    `<div class="tab ${quiz.type === t ? "on" : ""}" onclick="setQuizType('${t}')">${t === "全部" ? "全部" : esc(t)}</div>`
+  ).join("");
+  if (!L) {
+    render(`<div class="tabs scroll-x">${tabs}</div><div class="card empty">当前题型暂无可答题目</div>`);
+    return;
+  }
   const q = quiz.list[quiz.pos];
-  const answered = quiz.answers[quiz.pos] != null;
+  const key = qKey(q);
+  const answered = quiz.answers[key] != null;
+  const st = quizStats();
   let optHtml = "";
   if (q.type === "多选") {
-    const sel = quiz.picked[quiz.pos] || [];
+    const sel = quiz.picked[key] || [];
     const correct = (q.answer || "").split("");
     optionKeys(q).forEach((k, i) => {
       const txt = q.options[i];
@@ -455,7 +481,7 @@ function renderQuiz() {
     const keys = q.type === "单选" ? ["A", "B", "C", "D"] : ["√", "×"];
     keys.forEach((k, i) => {
       if (q.type === "单选" && !q.options[i]) return;
-      const chosen = quiz.answers[quiz.pos] === k;
+      const chosen = quiz.answers[key] === k;
       let cls = "opt";
       if (answered) {
         if (k === q.answer) cls += " right";
@@ -469,27 +495,28 @@ function renderQuiz() {
   let feed = "";
   let action = "";
   if (answered) {
-    const ok = quiz.answers[quiz.pos] === q.answer;
+    const ok = quiz.answers[key] === q.answer;
     feed = `<div class="ansbox ${ok ? "ok" : "bad"}">${ok ? "✅ 回答正确！" : ("❌ 回答错误，正确答案：" + ansInline(q))}`;
     if (q.type === "判断" && q.answer === "×" && q.correctDesc) {
       feed += `<div class="desc"><b>正确描述：</b>${esc(q.correctDesc)}</div>`;
     }
     feed += (q.answerImages ? imagesHtml(q.answerImages) : "") + "</div>";
-    action = `<button class="btn grad-green" onclick="quizNext()">${quiz.pos === L - 1 ? "查看成绩" : "下一题"} ›</button>`;
   } else if (q.type === "多选") {
-    const sel = (quiz.picked[quiz.pos] || []).slice().sort().join("");
+    const sel = (quiz.picked[key] || []).slice().sort().join("");
     action = `<button class="btn grad-green" onclick="submitMulti()">提交答案${sel ? "（已选 " + sel + "）" : ""}</button>`;
   } else {
     action = '<button class="btn ghost" disabled>请选择答案</button>';
   }
-  const pct = L ? Math.round(quiz.pos / L * 100) : 0;
+  const pct = L ? Math.round((quiz.pos + 1) / L * 100) : 0;
   render(`
+    <div class="tabs scroll-x">${tabs}</div>
     <div class="card qcard">
       <div class="qmeta">
-        <span class="muted">第 <b>${quiz.pos + 1}</b> / ${L} 题　已答对 <b>${score()}</b> 题</span>
+        <span class="muted">第 <b>${quiz.pos + 1}</b> / ${L} 题　已答对 <b>${st.correct}</b> 题</span>
         <span class="mchips">${metaLine(q)}</span>
       </div>
       <div class="progress"><div style="width:${pct}%"></div><span class="progress-num">${pct}%</span></div>
+      <div class="muted mb6">已答 <b>${st.answered}</b> 题　当前正确率 <b>${st.acc}%</b></div>
       <p class="stem">${stemHtml(q, false)}</p>
       ${imagesHtml(q.images)}
       ${q.type === "多选" ? '<div class="muted mb6">多选题：可选多项，选好后点击“提交答案”</div>' : ""}
@@ -498,66 +525,89 @@ function renderQuiz() {
       <div class="navbar">
         <button class="btn ghost" ${quiz.pos === 0 ? "disabled" : ""} onclick="quizNav(-1)">‹ 上一题</button>
         ${action}
+        <button class="btn ghost" ${quiz.pos >= L - 1 ? "disabled" : ""} onclick="quizNav(1)">下一题 ›</button>
       </div>
+    </div>
+    <div class="jump">
+      <input type="number" id="jumpInput" min="1" placeholder="跳转到第几题">
+      <button class="btn" onclick="quizJump()">跳转</button>
+    </div>
+    <div class="toolbar">
+      <button class="btn ghost" onclick="quizShuffle()">${quiz.shuffled ? "🔢 顺序出题" : "🔀 乱序出题"}</button>
+      <button class="btn ghost" onclick="quizReset()">🔄 重置本题型</button>
     </div>
   `);
 }
-function pick(k) { quiz.answers[quiz.pos] = k; renderQuiz(); }
+function pick(k) {
+  const q = quiz.list[quiz.pos];
+  const key = qKey(q);
+  if (quiz.answers[key] != null) return;
+  quiz.answers[key] = k;
+  recordAnswer(q, k);
+  saveQuizSession();
+  renderQuiz();
+}
 function multiPick(k) {
-  const cur = (quiz.picked[quiz.pos] || []).slice();
+  const q = quiz.list[quiz.pos];
+  const key = qKey(q);
+  if (quiz.answers[key] != null) return;
+  const cur = (quiz.picked[key] || []).slice();
   const i = cur.indexOf(k);
   if (i >= 0) cur.splice(i, 1); else cur.push(k);
-  quiz.picked[quiz.pos] = cur;
+  quiz.picked[key] = cur;
   renderQuiz();
 }
 function submitMulti() {
-  const sel = (quiz.picked[quiz.pos] || []).slice().sort().join("");
+  const q = quiz.list[quiz.pos];
+  const key = qKey(q);
+  const sel = (quiz.picked[key] || []).slice().sort().join("");
   if (!sel) { alert("请至少选择一项"); return; }
-  quiz.answers[quiz.pos] = sel;
+  quiz.answers[key] = sel;
+  recordAnswer(q, sel);
+  saveQuizSession();
   renderQuiz();
 }
-function quizNav(d) { quiz.pos = Math.min(Math.max(0, quiz.pos + d), quiz.list.length - 1); renderQuiz(); }
-function quizNext() { if (quiz.pos < quiz.list.length - 1) { quiz.pos++; renderQuiz(); } else finishQuiz(); }
-function score() {
-  let s = 0;
-  for (const k in quiz.answers) if (quiz.answers[k] === quiz.list[k].answer) s++;
-  return s;
+function quizNav(d) {
+  quiz.pos = Math.min(Math.max(0, quiz.pos + d), quiz.list.length - 1);
+  saveQuizSession();
+  renderQuiz();
 }
-function finishQuiz() {
-  const L = quiz.list.length, sc = score(), pct = L ? Math.round(sc / L * 100) : 0;
-  if (pct > parseInt(getBest() || "0")) setBest(String(pct));
-  const wrong = quiz.list
-    .map((q, i) => ({ ...q, ua: quiz.answers[i] != null ? quiz.answers[i] : "" }))
-    .filter((q) => q.ua !== q.answer);
-  saveWrong(wrong);
-  let wrongHtml = "";
-  if (wrong.length) {
-    wrongHtml = '<div class="card"><h2>❌ 错题回顾（' + wrong.length + ' 题）</h2>'
-      + wrong.map((q, i) => wrongQuestionHtml(q, i)).join("")
-      + '<button class="btn block grad-green" style="margin-top:12px" onclick="retryQuiz()">🔁 重练这组错题</button></div>';
+function quizJump() {
+  const n = parseInt($("jumpInput").value);
+  if (!n) return;
+  quiz.pos = Math.min(Math.max(0, n - 1), quiz.list.length - 1);
+  saveQuizSession();
+  renderQuiz();
+}
+function quizShuffle() {
+  if (quiz.shuffled) {
+    quiz.shuffled = false;
+    quiz.list = quizPool(quiz.type);
+  } else {
+    quiz.list = shuffle(quiz.list);
+    quiz.shuffled = true;
   }
-  render(`
-    <div class="card result-card">
-      <div class="score-ring" style="--pct:${pct}">
-        <div class="score-ring-in"><b>${pct}%</b><span>${pct >= 80 ? "优秀" : (pct >= 60 ? "及格" : "加油")}</span></div>
-      </div>
-      <div class="result-sub">答对 <b>${sc}</b> / <b>${L}</b> 题</div>
-      <div class="grid2">
-        <button class="btn block ghost" onclick="goQuiz()">再测一次</button>
-        <button class="btn block" onclick="goStudy()">去背题</button>
-      </div>
-    </div>
-    ${wrongHtml}
-  `);
+  quiz.pos = 0;
+  saveQuizSession();
+  renderQuiz();
 }
-function retryQuiz() {
-  quiz = { list: shuffle(quiz.list.filter((q, i) => quiz.answers[i] !== q.answer)), pos: 0, answers: {}, picked: {} };
+function quizReset() {
+  if (!confirm("确定重置「" + quiz.type + "」的答题进度？")) return;
+  if (quiz.source === "bank") {
+    const all = loadQuizSessions();
+    delete all[quiz.type];
+    localStorage.setItem(quizStorageKey(), JSON.stringify(all));
+  }
+  buildQuiz(quiz.type);
   renderQuiz();
 }
 function reviewWrong() {
-  const w = wrongFiltered();
-  if (!w.length) { alert("暂无错题记录 🎉"); return; }
-  quiz = { list: shuffle(w), pos: 0, answers: {}, picked: {} };
+  quiz.source = "wrong";
+  buildQuiz("全部");
+  if (!quiz.list.length) { alert("暂无客观错题记录 🎉"); quiz.source = "bank"; goQuiz(); return; }
+  currentPage = "quiz";
+  setFoot(3);
+  $("appTitle").textContent = "📕 错题练习 · " + (META.title || "");
   renderQuiz();
 }
 
