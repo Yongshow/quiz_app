@@ -9,3 +9,6 @@ venv/
 .vscode/
 .idea/
 .DS_Store
+
+# 源题库（不推送）
+/data/

@@ -12,8 +12,10 @@
     static_version/data/pv_professional.json  # 题库一：光伏专业题库（xls）
     static_version/data/pv_all.json           # 题库二：光伏汇总全部（docx）
     static_version/data/pv_practice.json      # 题库三：光伏实操笔试题库（xlsx + docx）
+    static_version/data/pv_duty_full.json     # 题库四：光伏发电运维值班员题库（两 xlsx 融合）
     static_version/data/media/pv_all/*        # 题库二的图片
     static_version/data/media/pv_practice/*   # 题库三的图片
+    static_version/data/media/pv_duty_full/*  # 题库四的图片
 """
 from __future__ import annotations
 
@@ -31,6 +33,7 @@ from qbank.parser import TYPE_ORDER as XLS_TYPE_ORDER, parse_xls  # noqa: E402
 from qbank.docx_parser import parse_all  # noqa: E402
 from qbank.xlsx_parser import parse_xlsx  # noqa: E402
 from qbank.bishi_parser import parse_bishi  # noqa: E402
+from qbank.xlsx_merge_parser import parse_merged  # noqa: E402
 
 DATA_DIR = os.path.join(ROOT, "data")
 OUT_DIR = os.path.join(ROOT, "static_version", "data")
@@ -39,9 +42,12 @@ XLS_PATH = os.path.join(DATA_DIR, "光伏专业题库.xls")
 DOCX_PATH = os.path.join(DATA_DIR, "光伏汇总全部.docx")
 PRACTICE_XLSX_PATH = os.path.join(DATA_DIR, "光伏实操题库.xlsx")
 BISHI_DOCX_PATH = os.path.join(DATA_DIR, "光伏笔试题库.docx")
+DUTY_XLSX_PATH = os.path.join(DATA_DIR, "光伏发电运维值班员题库.xlsx")
+FULL_XLSX_PATH = os.path.join(DATA_DIR, "光伏题库全.xlsx")
 
 DOCX_TYPE_ORDER = ["单选", "多选", "判断", "填空", "简答", "论述", "名词解释", "计算", "绘图"]
 PRACTICE_TYPE_ORDER = ["单选", "多选", "判断", "实操", "填空", "简答", "论述", "名词解释", "计算", "绘图"]
+MERGED_TYPE_ORDER = ["单选", "多选", "判断", "填空", "简答", "论述", "名词解释", "计算", "绘图"]
 
 
 def _meta(items, title, description, counts=None, type_order=None):
@@ -146,8 +152,41 @@ def build_pv_practice():
     return "pv_practice", meta, docx["warnings"]
 
 
+def build_pv_duty_full():
+    """融合《光伏发电运维值班员题库.xlsx》与《光伏题库全.xlsx》。"""
+    parsed = parse_merged(DUTY_XLSX_PATH, FULL_XLSX_PATH)
+    items = parsed["items"]
+    for i, it in enumerate(items, 1):
+        it["id"] = i
+
+    media_dir = os.path.join(OUT_DIR, "media", "pv_duty_full")
+    if os.path.isdir(media_dir):
+        shutil.rmtree(media_dir)
+    os.makedirs(media_dir, exist_ok=True)
+    used = set()
+    for it in items:
+        used.update(it.get("images", []) or [])
+        used.update(it.get("answerImages", []) or [])
+    for fname, blob in parsed["images"].items():
+        if fname not in used:
+            continue
+        with open(os.path.join(media_dir, fname), "wb") as f:
+            f.write(blob)
+
+    counts = {}
+    for q in items:
+        counts[q["type"]] = counts.get(q["type"], 0) + 1
+    meta = _meta(items, "光伏发电运维值班员题库（融合）",
+                 "由 data/光伏发电运维值班员题库.xlsx + data/光伏题库全.xlsx 去重融合生成",
+                 counts, MERGED_TYPE_ORDER)
+    meta["mediaDir"] = "media/pv_duty_full"
+    _write_bank("pv_duty_full.json", items, meta)
+    return "pv_duty_full", meta, parsed["warnings"]
+
+
 def main() -> None:
-    for p in (XLS_PATH, DOCX_PATH, PRACTICE_XLSX_PATH, BISHI_DOCX_PATH):
+    for p in (XLS_PATH, DOCX_PATH, PRACTICE_XLSX_PATH, BISHI_DOCX_PATH,
+              DUTY_XLSX_PATH, FULL_XLSX_PATH):
         if not os.path.exists(p):
             raise SystemExit(f"未找到: {p}")
 
@@ -158,6 +197,7 @@ def main() -> None:
     id1, m1 = build_pv_professional()
     id2, m2, warnings = build_pv_all()
     id3, m3, warnings3 = build_pv_practice()
+    id4, m4, warnings4 = build_pv_duty_full()
 
     banks = [
         {"id": id1, "name": m1["title"], "file": "pv_professional.json",
@@ -169,6 +209,9 @@ def main() -> None:
         {"id": id3, "name": m3["title"], "file": "pv_practice.json",
          "description": m3["description"], "total": m3["total"],
          "counts": m3["counts"], "types": m3["types"]},
+        {"id": id4, "name": m4["title"], "file": "pv_duty_full.json",
+         "description": m4["description"], "total": m4["total"],
+         "counts": m4["counts"], "types": m4["types"]},
     ]
     with open(os.path.join(OUT_DIR, "banks.json"), "w", encoding="utf-8") as f:
         json.dump({"banks": banks}, f, ensure_ascii=False, indent=1)
@@ -181,6 +224,10 @@ def main() -> None:
         print(f"  提示: pv_all 解析告警 {len(warnings)} 条（多为原题缺答案）")
     if warnings3:
         print(f"  提示: pv_practice 解析告警 {len(warnings3)} 条：" + "、".join(warnings3))
+    if warnings4:
+        print(f"  提示: pv_duty_full 解析告警 {len(warnings4)} 条：")
+        for w in warnings4[:20]:
+            print(f"    - {w}")
 
 
 if __name__ == "__main__":

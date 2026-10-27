@@ -10,6 +10,7 @@
 | 光伏专业题库 | `data/光伏专业题库.xls` | 715 | ✅ 已完成 |
 | 光伏汇总全部 | `data/光伏汇总全部.docx` | 3330 | ✅ 已导入（不含选项无分隔符的少量选择题） |
 | 光伏实操笔试题库 | `data/光伏实操题库.xlsx` + `data/光伏笔试题库.docx` | 1219 | ✅ 已完成 |
+| 光伏发电运维值班员题库（融合） | `data/光伏发电运维值班员题库.xlsx` + `data/光伏题库全.xlsx` | 5822 | ✅ 已完成 |
 
 > 「光伏汇总全部」原文档是一份多题库汇总：Part A 为规整的 1290 题；Part B 含多个分区。
 > 已导入：Part A 全部；Part B 的「一、填空 / 二、选择 / 三、判断 / 四、简答 / 五、问答 /
@@ -22,6 +23,14 @@
 > `光伏笔试题库.docx` 提供问答 120 题（自动识别为 简答 108 / 计算 12），含图 19 张。
 > 章节取岗位等级（一级~四级生产岗位能力）；实操题章节取规范化后的三类（劳保工器具、应急处置、设备操作）。
 > 题干相近但选项/答案不同的题目视为独立题，不做去重。
+
+> 「光伏发电运维值班员题库（融合）」为两个 xlsx 去重融合后的题库：
+> - 来源一 `光伏发电运维值班员题库.xlsx` 结构完整：单选 1284 / 多选 930 / 判断 1490 / 填空 803 / 问答 474。
+> - 来源二 `光伏题库全.xlsx` 包含来源一的全部客观题，并额外提供半结构化/OCR 题、简答、计算、绘图。
+> - 已按「题干 + 选项 + 答案」去重；题干相同但答案/选项不同的变体保留。融合后共 5822 题。
+> - 题库全的 OCR 部分为尽力解析；计算题保留原始文字、不做 LaTeX 转换，有图时直接使用原图；
+>   绘图题保留原答案图片；原表已有文字说明时一并保留，无文字时仅显示图片。
+> - 最终题型：单选 1561 / 多选 846 / 判断 1676 / 填空 770 / 简答 854 / 论述 15 / 计算 52 / 绘图 48。
 
 ## 二、题型与功能
 
@@ -45,12 +54,15 @@ quiz_app/
 │   ├── 光伏专业题库.xls        # 题库一来源
 │   ├── 光伏汇总全部.docx       # 题库二来源
 │   ├── 光伏实操题库.xlsx       # 题库三来源（选择/判断/实操）
-│   └── 光伏笔试题库.docx       # 题库三来源（问答）
+│   ├── 光伏笔试题库.docx       # 题库三来源（问答）
+│   ├── 光伏发电运维值班员题库.xlsx # 题库四来源（结构完整）
+│   └── 光伏题库全.xlsx         # 题库四来源（结构化 + OCR）
 ├── qbank/
 │   ├── parser.py               # xls 解析器
 │   ├── docx_parser.py          # docx 解析器（Part A 已实现）
 │   ├── xlsx_parser.py          # xlsx 解析器（题库三）
-│   └── bishi_parser.py         # docx 解析器（题库三·笔试问答）
+│   ├── bishi_parser.py         # docx 解析器（题库三·笔试问答）
+│   └── xlsx_merge_parser.py    # xlsx 融合解析器（题库四）
 ├── scripts/build_static.py     # 生成全部前端数据
 ├── static_version/             # 纯前端静态版
 │   ├── index.html
@@ -62,8 +74,10 @@ quiz_app/
 │       ├── pv_professional.json
 │       ├── pv_all.json
 │       ├── pv_practice.json
+│       ├── pv_duty_full.json
 │       ├── media/pv_all/*        # 题库二图片
-│       └── media/pv_practice/*   # 题库三图片
+│       ├── media/pv_practice/*   # 题库三图片
+│       └── media/pv_duty_full/*  # 题库四图片
 ├── requirements.txt
 └── README.md
 ```
@@ -92,7 +106,11 @@ python scripts/build_static.py
 ```
 
 生成/覆盖：`static_version/data/banks.json`、`pv_professional.json`、`pv_all.json`、
-`pv_practice.json` 及 `media/pv_all/`、`media/pv_practice/`。
+`pv_practice.json`、`pv_duty_full.json` 及 `media/pv_all/`、`media/pv_practice/`、
+`media/pv_duty_full/`。
+
+> `data/` 下的原始题库文件不纳入 Git 仓库（见 `.gitignore` 的 `/data/`），
+> 只推送 `static_version/` 中生成好的前端数据。
 
 ## 六、部署到 GitHub Pages
 
@@ -138,3 +156,15 @@ git push
   - 岗位等级 `B1~B4` 映射为「一级~四级生产岗位能力」；难度 `易/较易 → 容易`、`较难/难 → 困难`。
 - `光伏笔试题库.docx`：按题号 `【Bx-2-NNNN】` 切题，答案在“答：”之后；题图/答案图按段落位置关联；
   题干含 `计算/试求/多少/偏差/利用时长` 等关键词时识别为 `计算`，其余为 `简答`。
+
+**题库四（xlsx + xlsx 融合）**：解析器 `qbank/xlsx_merge_parser.py`。
+- `光伏发电运维值班员题库.xlsx`：按表头定位题干/难度/答案/选项，问答按关键词分为简答/计算；
+  WPS `=DISPIMG("ID_...",1)` 单元格图片会从 `cellimages.xml` 提取并关联为答案图。
+- `光伏题库全.xlsx`：
+  - 单选：结构化 4 列/6 列块、编号题块、OCR 页标记块；
+  - 判断：结构化表、编号题块（答案在末尾括号）、OCR 页标记块、两列「题干 + 对/错」块；
+  - 填空：答案 A-L 合并为 `answers` 数组，`orderFixed=false`；
+  - 简答：编号题块、OCR「简答/论述题」块、两列 Q/A 块；
+  - 计算：保留原始文字答案，不做 LaTeX 转换；有图片时直接关联原图；
+  - 绘图：答案图片必保留；原表已有文字说明时一并保留，无文字时仅显示图片。
+- 去重键：题型 + 归一化题干 + 选项/答案；完全相同的重复项合并，答案/选项不同的变体保留。
